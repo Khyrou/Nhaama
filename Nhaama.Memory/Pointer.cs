@@ -14,6 +14,8 @@ namespace Nhaama.Memory
         public ulong Address = 0;
 
         [JsonProperty] public readonly ulong[] PointerPath;
+        [JsonProperty] public ulong Adressed;
+        [JsonProperty] public ulong PointerValue;
         [JsonProperty] public readonly ProcessModule Module;
 
         [JsonConstructor]
@@ -86,6 +88,8 @@ namespace Nhaama.Memory
                 currentAddress =
                     process.ReadUInt64(Address);
             }
+            Adressed = (ulong)Module.BaseAddress.ToInt64() + PointerPath[0];
+            PointerValue = process.ReadUInt64((ulong)Module.BaseAddress + PointerPath[0]);
         }
         
         public static implicit operator ulong(Pointer p)  {  return p.Address;  }
