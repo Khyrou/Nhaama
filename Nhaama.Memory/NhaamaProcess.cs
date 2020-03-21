@@ -42,13 +42,24 @@ namespace Nhaama.Memory
             return ReadBytes(offset, 1)[0];
         }
 
-        /// <summary>
-        /// Read a byte array from the specified offset.
-        /// </summary>
-        /// <param name="offset">Offset to read from.</param>
-        /// <param name="length">Length to read.</param>
-        /// <returns>Read byte array.</returns>
-        public byte[] ReadBytes(ulong offset, uint length)
+		/// <summary>
+		/// Read a byte from the specified offset.
+		/// </summary>
+		/// <param name="offset">Offset to read from.</param>
+		/// <param name="pointerPath">The offsets needed to resolve the pointer.</param>
+		/// <returns></returns>
+		public byte ReadByte(ulong offset, params ulong[] pointerPath)
+		{
+			return ReadBytes(offset, 1, pointerPath)[0];
+		}
+
+		/// <summary>
+		/// Read a byte array from the specified offset.
+		/// </summary>
+		/// <param name="offset">Offset to read from.</param>
+		/// <param name="length">Length to read.</param>
+		/// <returns>Read byte array.</returns>
+		public byte[] ReadBytes(ulong offset, uint length)
         {
             var bytes = new byte[length];
             Kernel32.ReadProcessMemory(BaseProcess.Handle,
@@ -56,13 +67,41 @@ namespace Nhaama.Memory
 
             return bytes;
         }
+		/// <summary>
+		/// Read a byte array from the specified offset.
+		/// </summary>
+		/// <param name="offset">Offset to read from.</param>
+		/// <param name="length">Length to read.</param>
+		/// <param name="pointerpath">The offsets needed to resolve the pointer.</param>
+		/// <returns>Read byte array.</returns>
+		public byte[] ReadBytes(ulong offset, uint length, params ulong[] pointerpath)
+		{
+			if (pointerpath == null) pointerpath = new ulong[1];
+			var bytes = new byte[length];
 
-        /// <summary>
-        /// Read a UInt64 from the specified offset.
-        /// </summary>
-        /// <param name="offset">Offset to read from.</param>
-        /// <returns>Read UInt64.</returns>
-        public ulong ReadUInt64(ulong offset) => BitConverter.ToUInt64(ReadBytes(offset, 8), 0);
+			var currentAddress = this.ReadUInt64((ulong)offset + pointerpath[0]);
+
+			var Address = (ulong)0x00;
+
+			for (int i = 1; i < pointerpath.Length; i++)
+			{
+				Address = currentAddress + pointerpath[i];
+
+				currentAddress = this.ReadUInt64(Address);
+			}
+			if (pointerpath.Length == 1)
+				Address = (ulong)offset + pointerpath[0];
+			Kernel32.ReadProcessMemory(BaseProcess.Handle,
+				new UIntPtr(Address), bytes, new UIntPtr(length), IntPtr.Zero);
+
+			return bytes;
+		}
+		/// <summary>
+		/// Read a UInt64 from the specified offset.
+		/// </summary>
+		/// <param name="offset">Offset to read from.</param>
+		/// <returns>Read UInt64.</returns>
+		public ulong ReadUInt64(ulong offset) => BitConverter.ToUInt64(ReadBytes(offset, 8), 0);
         
         /// <summary>
         /// Read a UInt32 from the specified offset.
@@ -79,20 +118,44 @@ namespace Nhaama.Memory
         public ushort ReadUInt16(ulong offset) => BitConverter.ToUInt16(ReadBytes(offset, 2), 0);
 
 		/// <summary>
+		/// Read a UInt16 from the specified offset.
+		/// </summary>
+		/// <param name="offset">Offset to read from.</param>
+		/// /// <param name="pointerPath">The offsets needed to resolve the pointer.</param>
+		/// <returns>Read UInt16.</returns>
+		public ushort ReadUInt16(ulong offset, params ulong[] pointerPath) => BitConverter.ToUInt16(ReadBytes(offset, 2, pointerPath), 0);
+
+		/// <summary>
+		/// Read a Int32 from the specified offset.
+		/// </summary>
+		/// <param name="offset">Offset to read from.</param>
+		/// <param name="pointerPath">The offsets needed to resolve the pointer.</param>
+		/// <returns>Read Int32.</returns>
+		public int ReadInt32(ulong offset, params ulong[] pointerPath) => BitConverter.ToInt32(ReadBytes(offset, 4, pointerPath), 0);
+
+		/// <summary>
 		/// Read a float from the specified offset.
 		/// </summary>
 		/// <param name="offset">Offset to read from.</param>
 		/// <returns>Read Float.</returns>
 		public float ReadFloat(ulong offset) => BitConverter.ToSingle(ReadBytes(offset, 4), 0);
 
-        /// <summary>
-        /// Read a string from the specified offset.
-        /// </summary>
-        /// <param name="offset">Offset to read from.</param>
-        /// <param name="encodingType">Encoding, default: UTF-8</param>
-        /// <returns>Read string.</returns>
-        /// <exception cref="ArgumentOutOfRangeException">Gets thrown when an unknown string encoding is provided.</exception>
-        public string ReadString(ulong offset, StringEncodingType encodingType = StringEncodingType.Utf8)
+		/// <summary>
+		/// Read a float from the specified offset.
+		/// </summary>
+		/// <param name="offset">Offset to read from.</param>
+		/// <param name="pointerPath">The offsets needed to resolve the pointer.</param>
+		/// <returns>Read Float.</returns>
+		public float ReadFloat(ulong offset, params ulong[] pointerPath) => BitConverter.ToSingle(ReadBytes(offset, 4, pointerPath), 0);
+
+		/// <summary>
+		/// Read a string from the specified offset.
+		/// </summary>
+		/// <param name="offset">Offset to read from.</param>
+		/// <param name="encodingType">Encoding, default: UTF-8</param>
+		/// <returns>Read string.</returns>
+		/// <exception cref="ArgumentOutOfRangeException">Gets thrown when an unknown string encoding is provided.</exception>
+		public string ReadString(ulong offset, StringEncodingType encodingType = StringEncodingType.Utf8)
         {
             var bytes = new List<byte>();
 
@@ -118,17 +181,36 @@ namespace Nhaama.Memory
             
         }
 
-        #endregion
+		/// <summary>
+		/// Read a string from the specified offset.
+		/// </summary>
+		/// <param name="offset">Offset to read from.</param>
+		/// <param name="pointerPath">The offsets needed to resolve the pointer.</param>
+		/// <returns>Read string.</returns>
+		public string ReadString(ulong offset, params ulong[] pointerPath)
+		{
+			var bytes = new List<byte>();
+			do
+			{
+				bytes.Add(ReadByte(offset, pointerPath));
+				offset++;
+			} while (bytes[bytes.Count - 1] != 0x0);
 
-        #region Writers
+			bytes = bytes.Take(bytes.Count - 1).ToList();
+			return Encoding.UTF8.GetString(bytes.ToArray());
 
-        /// <summary>
-        /// Write a value to the specified offset, determined by type.
-        /// </summary>
-        /// <param name="offset">Offset to write to.</param>
-        /// <param name="data">Value to write.</param>
-        /// <exception cref="ArgumentException">Gets thrown, when the type to write is unsupported.</exception>
-        public void Write(ulong offset, object data)
+		}
+		#endregion
+
+		#region Writers
+
+		/// <summary>
+		/// Write a value to the specified offset, determined by type.
+		/// </summary>
+		/// <param name="offset">Offset to write to.</param>
+		/// <param name="data">Value to write.</param>
+		/// <exception cref="ArgumentException">Gets thrown, when the type to write is unsupported.</exception>
+		public void Write(ulong offset, object data)
         {
             var @writeMethods = new Dictionary<Type, Action>
             {
@@ -152,15 +234,63 @@ namespace Nhaama.Memory
                 throw new ArgumentException("Unsupported type.");
         }
 
-        /// <summary>
-        /// Write a string to the specified offset.
-        /// </summary>
-        /// <param name="offset"></param>
-        /// <param name="data"></param>
-        /// <param name="encodingType"></param>
-        /// <param name="zeroTerminated"></param>
-        /// <exception cref="ArgumentOutOfRangeException"></exception>
-        public void WriteString(ulong offset, string data, StringEncodingType encodingType = StringEncodingType.Utf8,
+		/// <summary>
+		/// Write a value to the specified offset, determined by type.
+		/// </summary>
+		/// <param name="data">Value to write.</param>
+		/// <param name="offset">Offset to write to.</param>
+		/// <param name="pointerPath">The offsets needed to resolve the pointer.</param>
+		/// <exception cref="ArgumentException">Gets thrown, when the type to write is unsupported.</exception>
+		public void Write(object data, ulong offset, params ulong[] pointerPath)
+		{
+			if (pointerPath != null)
+			{
+				var currentAddress = this.ReadUInt64((ulong)offset + pointerPath[0]);
+
+				var Address = (ulong)0x00;
+
+				for (int i = 1; i < pointerPath.Length; i++)
+				{
+					Address = currentAddress + pointerPath[i];
+
+					currentAddress = this.ReadUInt64(Address);
+				}
+				if (pointerPath.Length == 1)
+					offset = (ulong)offset + pointerPath[0];
+				else offset = Address;
+			}
+
+			var @writeMethods = new Dictionary<Type, Action>
+			{
+				{typeof(byte[]), () => WriteBytes(offset, (byte[]) data)},
+				{typeof(byte), () => WriteBytes(offset, new byte[] {(byte) data})},
+				{typeof(string), () => WriteString(offset, data.ToString())},
+				{typeof(char), () => WriteBytes(offset, new byte[] {(byte) data})},
+				{typeof(short), () => WriteBytes(offset, BitConverter.GetBytes((short) data))},
+				{typeof(ushort), () => WriteBytes(offset, BitConverter.GetBytes((ushort) data))},
+				{typeof(int), () => WriteBytes(offset, BitConverter.GetBytes((int) data))},
+				{typeof(uint), () => WriteBytes(offset, BitConverter.GetBytes((uint) data))},
+				{typeof(long), () => WriteBytes(offset, BitConverter.GetBytes((long) data))},
+				{typeof(ulong), () => WriteBytes(offset, BitConverter.GetBytes((ulong) data))},
+				{typeof(float), () => WriteBytes(offset, BitConverter.GetBytes((float) data))},
+				{typeof(double), () => WriteBytes(offset, BitConverter.GetBytes((double) data))},
+			};
+
+			if (@writeMethods.ContainsKey(data.GetType()))
+				@writeMethods[data.GetType()]();
+			else
+				throw new ArgumentException("Unsupported type.");
+		}
+
+		/// <summary>
+		/// Write a string to the specified offset.
+		/// </summary>
+		/// <param name="offset"></param>
+		/// <param name="data"></param>
+		/// <param name="encodingType"></param>
+		/// <param name="zeroTerminated"></param>
+		/// <exception cref="ArgumentOutOfRangeException"></exception>
+		public void WriteString(ulong offset, string data, StringEncodingType encodingType = StringEncodingType.Utf8,
             bool zeroTerminated = true)
         {
             if (zeroTerminated)
@@ -190,7 +320,7 @@ namespace Nhaama.Memory
         /// </summary>
         /// <param name="offset">Offset to write to.</param>
         /// <param name="data">Value to write.</param>
-        public void WriteBytes(ulong offset, byte[] data)
+        public void WriteBytes(ulong offset, params byte[] data)
         {
             Kernel32.WriteProcessMemory(BaseProcess.Handle, new UIntPtr(offset), data, new UIntPtr((uint) data.Length), IntPtr.Zero);
         }
